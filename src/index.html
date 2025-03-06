@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Stream Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .player-container {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+        }
+        audio {
+            width: 100%;
+            margin-top: 20px;
+        }
+        .status {
+            margin-top: 15px;
+            font-style: italic;
+            color: #666;
+        }
+        .settings {
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 1px solid #eee;
+        }
+        .refresh-timer {
+            font-size: 0.9em;
+            color: #888;
+            margin-top: 10px;
+        }
+        .autoplay-message {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            display: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .play-button {
+            background-color: #2196F3;
+        }
+        .play-button:hover {
+            background-color: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <h1>Audio Stream Player</h1>
+    
+    <div class="player-container">
+        <p>Listen to the live audio stream:</p>
+        
+        <audio id="audioPlayer" controls autoplay>
+            <source id="audioSource" src="http://localhost:3000" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        
+        <div class="autoplay-message" id="autoplayMessage">
+            Autoplay may be blocked by your browser. 
+            <button id="playButton" class="play-button">Click to Play</button>
+        </div>
+        
+        <div class="status" id="status">Connecting to stream...</div>
+        
+        <div class="refresh-timer" id="refreshTimer"></div>
+        
+        <div class="settings">
+            <label for="refreshInterval">Auto-refresh interval (minutes): </label>
+            <select id="refreshInterval">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="5" selected>5</option>
+                <option value="10">10</option>
+                <option value="15">15</option>
+                <option value="30">30</option>
+            </select>
+            <button id="manualRefresh">Refresh Now</button>
+        </div>
+    </div>
+
+    <script>
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioSource = document.getElementById('audioSource');
+        const statusElement = document.getElementById('status');
+        const refreshIntervalSelect = document.getElementById('refreshInterval');
+        const manualRefreshButton = document.getElementById('manualRefresh');
+        const refreshTimerElement = document.getElementById('refreshTimer');
+        const autoplayMessageElement = document.getElementById('autoplayMessage');
+        const playButton = document.getElementById('playButton');
+        
+        let refreshTimer;
+        let countdownInterval;
+        let timeUntilRefresh = 0;
+        let autoplayAttempted = false;
+        
+        // Function to refresh the audio stream
+        function refreshStream() {
+            const currentTime = audioPlayer.currentTime;
+            const wasPlaying = !audioPlayer.paused;
+            
+            // Update status
+            statusElement.textContent = 'Refreshing stream...';
+            
+            // Refresh the stream by updating the source URL with a cache-busting parameter
+            const timestamp = new Date().getTime();
+            audioSource.src = `http://localhost:3000?refresh=${timestamp}`;
+            
+            // Load and play the new source
+            audioPlayer.load();
+            if (wasPlaying || !autoplayAttempted) {
+                attemptAutoplay();
+            }
+            
+            // Reset the countdown timer
+            startRefreshTimer();
+        }
+        
+        // Function to attempt autoplay with fallback
+        function attemptAutoplay() {
+            autoplayAttempted = true;
+            
+            const playPromise = audioPlayer.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    // Autoplay started successfully
+                    statusElement.textContent = 'Stream is playing';
+                    autoplayMessageElement.style.display = 'none';
+                }).catch(error => {
+                    // Autoplay was prevented
+                    console.warn('Autoplay was prevented:', error);
+                    statusElement.textContent = 'Autoplay blocked by browser';
+                    autoplayMessageElement.style.display = 'block';
+                });
+            }
+        }
+        
+        // Function to start the refresh timer
+        function startRefreshTimer() {
+            // Clear any existing timers
+            if (refreshTimer) clearTimeout(refreshTimer);
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            // Get the selected refresh interval in minutes
+            const intervalMinutes = parseInt(refreshIntervalSelect.value, 10);
+            timeUntilRefresh = intervalMinutes * 60;
+            
+            // Update the countdown display
+            updateCountdownDisplay();
+            
+            // Set up the countdown interval
+            countdownInterval = setInterval(updateCountdownDisplay, 1000);
+            
+            // Set up the refresh timer
+            refreshTimer = setTimeout(refreshStream, intervalMinutes * 60 * 1000);
+        }
+        
+        // Function to update the countdown display
+        function updateCountdownDisplay() {
+            if (timeUntilRefresh <= 0) {
+                refreshTimerElement.textContent = 'Refreshing...';
+                return;
+            }
+            
+            const minutes = Math.floor(timeUntilRefresh / 60);
+            const seconds = timeUntilRefresh % 60;
+            refreshTimerElement.textContent = `Next refresh in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+            timeUntilRefresh--;
+        }
+        
+        // Event listeners
+        audioPlayer.addEventListener('playing', () => {
+            statusElement.textContent = 'Stream is playing';
+            autoplayMessageElement.style.display = 'none';
+        });
+        
+        audioPlayer.addEventListener('waiting', () => {
+            statusElement.textContent = 'Buffering...';
+        });
+        
+        audioPlayer.addEventListener('error', () => {
+            statusElement.textContent = 'Error connecting to stream. Make sure the server is running.';
+            autoplayMessageElement.style.display = 'block';
+            // Try to refresh automatically after an error
+            setTimeout(refreshStream, 5000);
+        });
+        
+        // Listen for changes to the refresh interval
+        refreshIntervalSelect.addEventListener('change', startRefreshTimer);
+        
+        // Manual refresh button
+        manualRefreshButton.addEventListener('click', refreshStream);
+        
+        // Play button (for when autoplay is blocked)
+        playButton.addEventListener('click', () => {
+            audioPlayer.play().then(() => {
+                statusElement.textContent = 'Stream is playing';
+                autoplayMessageElement.style.display = 'none';
+            }).catch(error => {
+                console.error('Error playing stream:', error);
+                statusElement.textContent = 'Error playing stream. Try refreshing.';
+            });
+        });
+        
+        // Check if audio is already playing when the page loads
+        window.addEventListener('load', () => {
+            // Wait a short time to check if autoplay worked
+            setTimeout(() => {
+                if (audioPlayer.paused) {
+                    // Autoplay didn't work, show the message
+                    attemptAutoplay();
+                }
+            }, 1000);
+        });
+        
+        // Start the refresh timer when the page loads
+        startRefreshTimer();
+    </script>
+</body>
+</html> 
