@@ -42,36 +42,6 @@
             color: #888;
             margin-top: 10px;
         }
-        .autoplay-message {
-            background-color: #fff3cd;
-            color: #856404;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 10px;
-            display: none;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 14px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .play-button {
-            background-color: #2196F3;
-        }
-        .play-button:hover {
-            background-color: #0b7dda;
-        }
     </style>
 </head>
 <body>
@@ -84,11 +54,6 @@
             <source id="audioSource" src="http://localhost:3000" type="audio/mpeg">
             Your browser does not support the audio element.
         </audio>
-        
-        <div class="autoplay-message" id="autoplayMessage">
-            Autoplay may be blocked by your browser. 
-            <button id="playButton" class="play-button">Click to Play</button>
-        </div>
         
         <div class="status" id="status">Connecting to stream...</div>
         
@@ -115,13 +80,10 @@
         const refreshIntervalSelect = document.getElementById('refreshInterval');
         const manualRefreshButton = document.getElementById('manualRefresh');
         const refreshTimerElement = document.getElementById('refreshTimer');
-        const autoplayMessageElement = document.getElementById('autoplayMessage');
-        const playButton = document.getElementById('playButton');
         
         let refreshTimer;
         let countdownInterval;
         let timeUntilRefresh = 0;
-        let autoplayAttempted = false;
         
         // Function to refresh the audio stream
         function refreshStream() {
@@ -137,32 +99,15 @@
             
             // Load and play the new source
             audioPlayer.load();
-            if (wasPlaying || !autoplayAttempted) {
-                attemptAutoplay();
+            if (wasPlaying) {
+                audioPlayer.play().catch(error => {
+                    console.error('Error playing after refresh:', error);
+                    statusElement.textContent = 'Error refreshing stream. Try again.';
+                });
             }
             
             // Reset the countdown timer
             startRefreshTimer();
-        }
-        
-        // Function to attempt autoplay with fallback
-        function attemptAutoplay() {
-            autoplayAttempted = true;
-            
-            const playPromise = audioPlayer.play();
-            
-            if (playPromise !== undefined) {
-                playPromise.then(() => {
-                    // Autoplay started successfully
-                    statusElement.textContent = 'Stream is playing';
-                    autoplayMessageElement.style.display = 'none';
-                }).catch(error => {
-                    // Autoplay was prevented
-                    console.warn('Autoplay was prevented:', error);
-                    statusElement.textContent = 'Autoplay blocked by browser';
-                    autoplayMessageElement.style.display = 'block';
-                });
-            }
         }
         
         // Function to start the refresh timer
@@ -201,7 +146,6 @@
         // Event listeners
         audioPlayer.addEventListener('playing', () => {
             statusElement.textContent = 'Stream is playing';
-            autoplayMessageElement.style.display = 'none';
         });
         
         audioPlayer.addEventListener('waiting', () => {
@@ -210,7 +154,6 @@
         
         audioPlayer.addEventListener('error', () => {
             statusElement.textContent = 'Error connecting to stream. Make sure the server is running.';
-            autoplayMessageElement.style.display = 'block';
             // Try to refresh automatically after an error
             setTimeout(refreshStream, 5000);
         });
@@ -220,28 +163,6 @@
         
         // Manual refresh button
         manualRefreshButton.addEventListener('click', refreshStream);
-        
-        // Play button (for when autoplay is blocked)
-        playButton.addEventListener('click', () => {
-            audioPlayer.play().then(() => {
-                statusElement.textContent = 'Stream is playing';
-                autoplayMessageElement.style.display = 'none';
-            }).catch(error => {
-                console.error('Error playing stream:', error);
-                statusElement.textContent = 'Error playing stream. Try refreshing.';
-            });
-        });
-        
-        // Check if audio is already playing when the page loads
-        window.addEventListener('load', () => {
-            // Wait a short time to check if autoplay worked
-            setTimeout(() => {
-                if (audioPlayer.paused) {
-                    // Autoplay didn't work, show the message
-                    attemptAutoplay();
-                }
-            }, 1000);
-        });
         
         // Start the refresh timer when the page loads
         startRefreshTimer();
