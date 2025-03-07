@@ -32,15 +32,23 @@
             font-style: italic;
             color: #666;
         }
-        .settings {
-            margin-top: 20px;
-            padding: 10px;
-            border-top: 1px solid #eee;
-        }
-        .refresh-timer {
+        .refresh-info {
+            margin-top: 10px;
             font-size: 0.9em;
             color: #888;
-            margin-top: 10px;
+        }
+        .settings {
+            margin-top: 20px;
+            text-align: left;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .settings label {
+            margin-right: 10px;
+        }
+        .settings input {
+            width: 60px;
         }
     </style>
 </head>
@@ -56,20 +64,12 @@
         </audio>
         
         <div class="status" id="status">Connecting to stream...</div>
-        
-        <div class="refresh-timer" id="refreshTimer"></div>
+        <div class="refresh-info" id="refreshInfo">Stream will refresh automatically every <span id="refreshTimeDisplay">5</span> minutes</div>
         
         <div class="settings">
-            <label for="refreshInterval">Auto-refresh interval (minutes): </label>
-            <select id="refreshInterval">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="5" selected>5</option>
-                <option value="10">10</option>
-                <option value="15">15</option>
-                <option value="30">30</option>
-            </select>
-            <button id="manualRefresh">Refresh Now</button>
+            <label for="refreshInterval">Refresh interval (minutes):</label>
+            <input type="number" id="refreshInterval" min="1" max="60" value="5">
+            <button id="applySettings">Apply</button>
         </div>
     </div>
 
@@ -77,73 +77,90 @@
         const audioPlayer = document.getElementById('audioPlayer');
         const audioSource = document.getElementById('audioSource');
         const statusElement = document.getElementById('status');
-        const refreshIntervalSelect = document.getElementById('refreshInterval');
-        const manualRefreshButton = document.getElementById('manualRefresh');
-        const refreshTimerElement = document.getElementById('refreshTimer');
+        const refreshIntervalInput = document.getElementById('refreshInterval');
+        const refreshTimeDisplay = document.getElementById('refreshTimeDisplay');
+        const applySettingsBtn = document.getElementById('applySettings');
         
-        let refreshTimer;
-        let countdownInterval;
-        let timeUntilRefresh = 0;
+        let refreshInterval = 5; // Default refresh interval in minutes
+        let refreshTimer = null;
+        let lastPlayPosition = 0;
+        let noProgressCount = 0;
         
         // Function to refresh the audio stream
         function refreshStream() {
-            const currentTime = audioPlayer.currentTime;
-            const wasPlaying = !audioPlayer.paused;
-            
-            // Update status
             statusElement.textContent = 'Refreshing stream...';
             
-            // Refresh the stream by updating the source URL with a cache-busting parameter
+            // Store current play position and playing state
+            lastPlayPosition = audioPlayer.currentTime;
+            const wasPlaying = !audioPlayer.paused;
+            
+            // Update the source URL with a cache-busting parameter
             const timestamp = new Date().getTime();
             audioSource.src = `http://localhost:3000?refresh=${timestamp}`;
             
             // Load and play the new source
             audioPlayer.load();
             if (wasPlaying) {
-                audioPlayer.play().catch(error => {
-                    console.error('Error playing after refresh:', error);
-                    statusElement.textContent = 'Error refreshing stream. Try again.';
-                });
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        console.error('Error playing audio after refresh:', error);
+                        statusElement.textContent = 'Error refreshing stream. Trying again...';
+                        // Try again after a short delay
+                        setTimeout(refreshStream, 3000);
+                    });
+                }
             }
             
-            // Reset the countdown timer
-            startRefreshTimer();
+            statusElement.textContent = 'Stream refreshed at ' + new Date().toLocaleTimeString();
         }
         
         // Function to start the refresh timer
         function startRefreshTimer() {
-            // Clear any existing timers
-            if (refreshTimer) clearTimeout(refreshTimer);
-            if (countdownInterval) clearInterval(countdownInterval);
-            
-            // Get the selected refresh interval in minutes
-            const intervalMinutes = parseInt(refreshIntervalSelect.value, 10);
-            timeUntilRefresh = intervalMinutes * 60;
-            
-            // Update the countdown display
-            updateCountdownDisplay();
-            
-            // Set up the countdown interval
-            countdownInterval = setInterval(updateCountdownDisplay, 1000);
-            
-            // Set up the refresh timer
-            refreshTimer = setTimeout(refreshStream, intervalMinutes * 60 * 1000);
-        }
-        
-        // Function to update the countdown display
-        function updateCountdownDisplay() {
-            if (timeUntilRefresh <= 0) {
-                refreshTimerElement.textContent = 'Refreshing...';
-                return;
+            // Clear any existing timer
+            if (refreshTimer) {
+                clearInterval(refreshTimer);
             }
             
-            const minutes = Math.floor(timeUntilRefresh / 60);
-            const seconds = timeUntilRefresh % 60;
-            refreshTimerElement.textContent = `Next refresh in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-            timeUntilRefresh--;
+            // Set up the new timer
+            refreshTimer = setInterval(refreshStream, refreshInterval * 60 * 1000);
+            refreshTimeDisplay.textContent = refreshInterval;
+            console.log(`Stream will refresh every ${refreshInterval} minutes`);
         }
         
-        // Event listeners
+        // Apply settings button click handler
+        applySettingsBtn.addEventListener('click', () => {
+            const newInterval = parseInt(refreshIntervalInput.value);
+            if (newInterval >= 1 && newInterval <= 60) {
+                refreshInterval = newInterval;
+                startRefreshTimer();
+                statusElement.textContent = `Refresh interval set to ${refreshInterval} minutes`;
+            } else {
+                alert('Please enter a valid interval between 1 and 60 minutes');
+            }
+        });
+        
+        // Check if the stream is actually progressing
+        function monitorStreamProgress() {
+            setInterval(() => {
+                if (!audioPlayer.paused) {
+                    // If the current time hasn't changed in 10 seconds, the stream might be stuck
+                    if (audioPlayer.currentTime === lastPlayPosition) {
+                        noProgressCount++;
+                        if (noProgressCount >= 2) { // After 20 seconds of no progress
+                            console.log('Stream appears to be stuck, refreshing...');
+                            refreshStream();
+                            noProgressCount = 0;
+                        }
+                    } else {
+                        noProgressCount = 0;
+                    }
+                    lastPlayPosition = audioPlayer.currentTime;
+                }
+            }, 10000); // Check every 10 seconds
+        }
+        
+        // Standard event listeners
         audioPlayer.addEventListener('playing', () => {
             statusElement.textContent = 'Stream is playing';
         });
@@ -153,19 +170,15 @@
         });
         
         audioPlayer.addEventListener('error', () => {
-            statusElement.textContent = 'Error connecting to stream. Make sure the server is running.';
-            // Try to refresh automatically after an error
-            setTimeout(refreshStream, 5000);
+            statusElement.textContent = 'Error connecting to stream. Refreshing...';
+            setTimeout(refreshStream, 3000);
         });
         
-        // Listen for changes to the refresh interval
-        refreshIntervalSelect.addEventListener('change', startRefreshTimer);
-        
-        // Manual refresh button
-        manualRefreshButton.addEventListener('click', refreshStream);
-        
-        // Start the refresh timer when the page loads
-        startRefreshTimer();
+        // Initialize the refresh timer and progress monitor when the page loads
+        window.addEventListener('load', () => {
+            startRefreshTimer();
+            monitorStreamProgress();
+        });
     </script>
 </body>
 </html> 
