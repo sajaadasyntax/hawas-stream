@@ -79,17 +79,17 @@
 <body>
     <h1>Dual Audio Stream Player</h1>
     
-    <!-- First Stream -->
+    <!-- Radio Stream -->
     <div class="player-container">
-        <div class="stream-label">Stream 1 - UK 24</div>
-        <p>Listen to the first live audio stream:</p>
+        <div class="stream-label">Radio Stream</div>
+        <p>Listen to the live radio broadcast:</p>
         
         <audio id="audioPlayer1" controls autoplay>
-            <source id="audioSource1" src="http://localhost:3001" type="audio/mpeg">
+            <source id="audioSource1" src="/Radio" type="audio/mpeg">
             Your browser does not support the audio element.
         </audio>
         
-        <div class="status" id="status1">Connecting to stream 1...</div>
+        <div class="status" id="status1">Connecting to Radio stream...</div>
         <div id="errorMessage1" class="error-message"></div>
         <div class="refresh-info" id="refreshInfo1">Stream will refresh automatically every <span id="refreshTimeDisplay1">3</span> minutes</div>
         
@@ -105,17 +105,17 @@
         </div>
     </div>
     
-    <!-- Second Stream -->
+    <!-- Quran Stream -->
     <div class="player-container">
-        <div class="stream-label">Stream 2 - UK 5</div>
-        <p>Listen to the second live audio stream:</p>
+        <div class="stream-label">Quran Stream</div>
+        <p>Listen to the Quran recitation:</p>
         
         <audio id="audioPlayer2" controls>
-            <source id="audioSource2" src="http://localhost:3002" type="audio/mpeg">
+            <source id="audioSource2" src="/Quran" type="audio/mpeg">
             Your browser does not support the audio element.
         </audio>
         
-        <div class="status" id="status2">Connecting to stream 2...</div>
+        <div class="status" id="status2">Connecting to Quran stream...</div>
         <div id="errorMessage2" class="error-message"></div>
         <div class="refresh-info" id="refreshInfo2">Stream will refresh automatically every <span id="refreshTimeDisplay2">3</span> minutes</div>
         
@@ -133,7 +133,7 @@
 
     <script>
         // Function factory to create stream handlers
-        function createStreamHandler(streamNumber, streamUrl) {
+        function createStreamHandler(streamNumber, streamUrl, streamName) {
             const audioPlayer = document.getElementById(`audioPlayer${streamNumber}`);
             const audioSource = document.getElementById(`audioSource${streamNumber}`);
             const statusElement = document.getElementById(`status${streamNumber}`);
@@ -154,7 +154,7 @@
             
             // Function to refresh the audio stream
             function refreshStream() {
-                statusElement.textContent = `Refreshing stream ${streamNumber}...`;
+                statusElement.textContent = `Refreshing ${streamName} stream...`;
                 errorMessageElement.textContent = '';
                 
                 // Store current play position and playing state
@@ -164,7 +164,7 @@
                 // Update the source URL with a cache-busting parameter
                 const timestamp = new Date().getTime();
                 // Use a different approach to avoid Nginx caching
-                const newStreamUrl = new URL(streamUrl);
+                const newStreamUrl = new URL(streamUrl, window.location.origin);
                 newStreamUrl.searchParams.set('nocache', timestamp);
                 audioSource.src = newStreamUrl.toString();
                 
@@ -175,15 +175,15 @@
                     const playPromise = audioPlayer.play();
                     if (playPromise !== undefined) {
                         playPromise.catch(error => {
-                            console.error(`Error playing audio ${streamNumber} after refresh:`, error);
-                            handlePlaybackError(`Error playing stream ${streamNumber} after refresh. Retrying...`);
+                            console.error(`Error playing ${streamName} after refresh:`, error);
+                            handlePlaybackError(`Error playing ${streamName} stream after refresh. Retrying...`);
                         });
                     }
                 }
                 
                 // Reset retry count on successful refresh
                 retryCount = 0;
-                statusElement.textContent = `Stream ${streamNumber} refreshed at ` + new Date().toLocaleTimeString();
+                statusElement.textContent = `${streamName} stream refreshed at ` + new Date().toLocaleTimeString();
             }
             
             // Handle playback errors with exponential backoff
@@ -193,13 +193,13 @@
                     const currentDelay = retryDelay * Math.pow(1.5, retryCount - 1); // Exponential backoff
                     
                     errorMessageElement.textContent = `${message} Retry ${retryCount}/${maxRetries} in ${currentDelay/1000}s`;
-                    statusElement.textContent = `Stream ${streamNumber} connection issue. Retrying...`;
+                    statusElement.textContent = `${streamName} stream connection issue. Retrying...`;
                     
                     // Try again after calculated delay
                     setTimeout(refreshStream, currentDelay);
                 } else {
                     errorMessageElement.textContent = `Maximum retry attempts reached. Please click "Reconnect" to try again.`;
-                    statusElement.textContent = `Stream ${streamNumber} connection failed`;
+                    statusElement.textContent = `${streamName} stream connection failed`;
                 }
             }
             
@@ -208,10 +208,10 @@
                 // Reset error state
                 retryCount = 0;
                 errorMessageElement.textContent = '';
-                statusElement.textContent = `Reconnecting to stream ${streamNumber}...`;
+                statusElement.textContent = `Reconnecting to ${streamName} stream...`;
                 
                 // Force browser to drop any cached connections
-                const reconnectUrl = new URL(streamUrl);
+                const reconnectUrl = new URL(streamUrl, window.location.origin);
                 reconnectUrl.searchParams.set('reconnect', Date.now());
                 audioSource.src = reconnectUrl.toString();
                 
@@ -219,8 +219,8 @@
                 const playPromise = audioPlayer.play();
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
-                        console.error(`Error reconnecting to stream ${streamNumber}:`, error);
-                        handlePlaybackError(`Failed to reconnect to stream ${streamNumber}.`);
+                        console.error(`Error reconnecting to ${streamName} stream:`, error);
+                        handlePlaybackError(`Failed to reconnect to ${streamName} stream.`);
                     });
                 }
                 
@@ -238,7 +238,7 @@
                 // Set up the new timer
                 refreshTimer = setInterval(refreshStream, refreshInterval * 60 * 1000);
                 refreshTimeDisplay.textContent = refreshInterval;
-                console.log(`Stream ${streamNumber} will refresh every ${refreshInterval} minutes`);
+                console.log(`${streamName} stream will refresh every ${refreshInterval} minutes`);
             }
             
             // Apply settings button click handler
@@ -247,7 +247,7 @@
                 if (newInterval >= 1 && newInterval <= 60) {
                     refreshInterval = newInterval;
                     startRefreshTimer();
-                    statusElement.textContent = `Stream ${streamNumber} refresh interval set to ${refreshInterval} minutes`;
+                    statusElement.textContent = `${streamName} stream refresh interval set to ${refreshInterval} minutes`;
                 } else {
                     alert('Please enter a valid interval between 1 and 60 minutes');
                 }
@@ -271,7 +271,7 @@
                         if (audioPlayer.currentTime === lastPlayPosition) {
                             noProgressCount++;
                             if (noProgressCount >= 2) { // After 20 seconds of no progress
-                                console.log(`Stream ${streamNumber} appears to be stuck, refreshing...`);
+                                console.log(`${streamName} stream appears to be stuck, refreshing...`);
                                 refreshStream();
                                 noProgressCount = 0;
                             }
@@ -285,34 +285,34 @@
             
             // Standard event listeners
             audioPlayer.addEventListener('playing', () => {
-                statusElement.textContent = `Stream ${streamNumber} is playing`;
+                statusElement.textContent = `${streamName} stream is playing`;
                 errorMessageElement.textContent = '';
                 retryCount = 0; // Reset retry count when stream plays successfully
             });
             
             audioPlayer.addEventListener('waiting', () => {
-                statusElement.textContent = `Stream ${streamNumber} buffering...`;
+                statusElement.textContent = `${streamName} stream buffering...`;
             });
             
             audioPlayer.addEventListener('error', (e) => {
-                console.error(`Audio player ${streamNumber} error:`, e);
+                console.error(`${streamName} player error:`, e);
                 
                 // Check if we can get more specific error information
-                let errorMessage = `Error connecting to stream ${streamNumber}.`;
+                let errorMessage = `Error connecting to ${streamName} stream.`;
                 if (audioPlayer.error) {
                     // MediaError codes: https://developer.mozilla.org/en-US/docs/Web/API/MediaError/code
                     switch (audioPlayer.error.code) {
                         case 1: // MEDIA_ERR_ABORTED
-                            errorMessage = `Stream ${streamNumber} playback aborted by the user.`;
+                            errorMessage = `${streamName} stream playback aborted by the user.`;
                             break;
                         case 2: // MEDIA_ERR_NETWORK
-                            errorMessage = `Stream ${streamNumber} network error (504 Gateway Timeout likely).`;
+                            errorMessage = `${streamName} stream network error (504 Gateway Timeout likely).`;
                             break;
                         case 3: // MEDIA_ERR_DECODE
-                            errorMessage = `Stream ${streamNumber} audio decoding error.`;
+                            errorMessage = `${streamName} stream audio decoding error.`;
                             break;
                         case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                            errorMessage = `Stream ${streamNumber} audio format not supported.`;
+                            errorMessage = `${streamName} stream audio format not supported.`;
                             break;
                     }
                 }
@@ -322,7 +322,7 @@
                     handlePlaybackError(errorMessage);
                 } else {
                     errorMessageElement.textContent = errorMessage;
-                    statusElement.textContent = `Stream ${streamNumber} error. Click Reconnect.`;
+                    statusElement.textContent = `${streamName} stream error. Click Reconnect.`;
                 }
             });
             
@@ -342,11 +342,11 @@
         
         // Initialize both streams when the page loads
         window.addEventListener('load', () => {
-            const stream1 = createStreamHandler(1, 'http://localhost:3001');
-            const stream2 = createStreamHandler(2, 'http://localhost:3002');
+            const radioStream = createStreamHandler(1, '/Radio', 'Radio');
+            const quranStream = createStreamHandler(2, '/Quran', 'Quran');
             
-            stream1.initialize();
-            stream2.initialize();
+            radioStream.initialize();
+            quranStream.initialize();
         });
     </script>
 </body>
