@@ -14,5 +14,5 @@ app.get('/', (req, res) => {
 // Start the server
 app.listen(port, () => {
   console.log(`Web server running at http://localhost:${port}`);
-  console.log(`Make sure your audio stream server is running on port 3000`);
+  console.log(`Make sure your audio stream servers are running on ports 3001 and 3002`);
 }); 

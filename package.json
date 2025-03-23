@@ -4,9 +4,10 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start-stream": "node src/server.js",
+    "start-stream1": "node src/server.js",
+    "start-stream2": "node src/server2.js",
     "start-web": "node src/serve.js",
-    "start": "concurrently \"npm run start-stream\" \"npm run start-web\""
+    "start": "concurrently \"npm run start-stream1\" \"npm run start-stream2\" \"npm run start-web\""
   },
   "author": "",
   "license": "ISC",

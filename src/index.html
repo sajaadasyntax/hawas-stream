@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Stream Player</title>
+    <title>Dual Audio Stream Player</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -22,6 +22,7 @@
             padding: 20px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             margin-top: 30px;
+            margin-bottom: 30px;
         }
         audio {
             width: 100%;
@@ -50,134 +51,302 @@
         .settings input {
             width: 60px;
         }
+        .button-group {
+            margin-top: 15px;
+        }
+        button {
+            margin-right: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .error-message {
+            color: #d9534f;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .stream-label {
+            font-weight: bold;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-size: 1.2em;
+            color: #333;
+            background-color: #eee;
+            padding: 5px;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
-    <h1>Audio Stream Player</h1>
+    <h1>Dual Audio Stream Player</h1>
     
+    <!-- First Stream -->
     <div class="player-container">
-        <p>Listen to the live audio stream:</p>
+        <div class="stream-label">Stream 1 - UK 24</div>
+        <p>Listen to the first live audio stream:</p>
         
-        <audio id="audioPlayer" controls autoplay>
-            <source id="audioSource" src="http://localhost:3000" type="audio/mpeg">
+        <audio id="audioPlayer1" controls autoplay>
+            <source id="audioSource1" src="http://localhost:3001" type="audio/mpeg">
             Your browser does not support the audio element.
         </audio>
         
-        <div class="status" id="status">Connecting to stream...</div>
-        <div class="refresh-info" id="refreshInfo">Stream will refresh automatically every <span id="refreshTimeDisplay">5</span> minutes</div>
+        <div class="status" id="status1">Connecting to stream 1...</div>
+        <div id="errorMessage1" class="error-message"></div>
+        <div class="refresh-info" id="refreshInfo1">Stream will refresh automatically every <span id="refreshTimeDisplay1">3</span> minutes</div>
+        
+        <div class="button-group">
+            <button id="refreshNowBtn1">Refresh Now</button>
+            <button id="reconnectBtn1">Reconnect</button>
+        </div>
         
         <div class="settings">
-            <label for="refreshInterval">Refresh interval (minutes):</label>
-            <input type="number" id="refreshInterval" min="1" max="60" value="5">
-            <button id="applySettings">Apply</button>
+            <label for="refreshInterval1">Refresh interval (minutes):</label>
+            <input type="number" id="refreshInterval1" min="1" max="60" value="3">
+            <button id="applySettings1">Apply</button>
+        </div>
+    </div>
+    
+    <!-- Second Stream -->
+    <div class="player-container">
+        <div class="stream-label">Stream 2 - UK 5</div>
+        <p>Listen to the second live audio stream:</p>
+        
+        <audio id="audioPlayer2" controls>
+            <source id="audioSource2" src="http://localhost:3002" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        
+        <div class="status" id="status2">Connecting to stream 2...</div>
+        <div id="errorMessage2" class="error-message"></div>
+        <div class="refresh-info" id="refreshInfo2">Stream will refresh automatically every <span id="refreshTimeDisplay2">3</span> minutes</div>
+        
+        <div class="button-group">
+            <button id="refreshNowBtn2">Refresh Now</button>
+            <button id="reconnectBtn2">Reconnect</button>
+        </div>
+        
+        <div class="settings">
+            <label for="refreshInterval2">Refresh interval (minutes):</label>
+            <input type="number" id="refreshInterval2" min="1" max="60" value="3">
+            <button id="applySettings2">Apply</button>
         </div>
     </div>
 
     <script>
-        const audioPlayer = document.getElementById('audioPlayer');
-        const audioSource = document.getElementById('audioSource');
-        const statusElement = document.getElementById('status');
-        const refreshIntervalInput = document.getElementById('refreshInterval');
-        const refreshTimeDisplay = document.getElementById('refreshTimeDisplay');
-        const applySettingsBtn = document.getElementById('applySettings');
-        
-        let refreshInterval = 5; // Default refresh interval in minutes
-        let refreshTimer = null;
-        let lastPlayPosition = 0;
-        let noProgressCount = 0;
-        
-        // Function to refresh the audio stream
-        function refreshStream() {
-            statusElement.textContent = 'Refreshing stream...';
+        // Function factory to create stream handlers
+        function createStreamHandler(streamNumber, streamUrl) {
+            const audioPlayer = document.getElementById(`audioPlayer${streamNumber}`);
+            const audioSource = document.getElementById(`audioSource${streamNumber}`);
+            const statusElement = document.getElementById(`status${streamNumber}`);
+            const errorMessageElement = document.getElementById(`errorMessage${streamNumber}`);
+            const refreshIntervalInput = document.getElementById(`refreshInterval${streamNumber}`);
+            const refreshTimeDisplay = document.getElementById(`refreshTimeDisplay${streamNumber}`);
+            const applySettingsBtn = document.getElementById(`applySettings${streamNumber}`);
+            const refreshNowBtn = document.getElementById(`refreshNowBtn${streamNumber}`);
+            const reconnectBtn = document.getElementById(`reconnectBtn${streamNumber}`);
             
-            // Store current play position and playing state
-            lastPlayPosition = audioPlayer.currentTime;
-            const wasPlaying = !audioPlayer.paused;
+            let refreshInterval = 3; // Default refresh interval in minutes
+            let refreshTimer = null;
+            let lastPlayPosition = 0;
+            let noProgressCount = 0;
+            let retryCount = 0;
+            let maxRetries = 5;
+            let retryDelay = 3000; // 3 seconds initial retry delay
             
-            // Update the source URL with a cache-busting parameter
-            const timestamp = new Date().getTime();
-            audioSource.src = `http://localhost:3000?refresh=${timestamp}`;
+            // Function to refresh the audio stream
+            function refreshStream() {
+                statusElement.textContent = `Refreshing stream ${streamNumber}...`;
+                errorMessageElement.textContent = '';
+                
+                // Store current play position and playing state
+                lastPlayPosition = audioPlayer.currentTime;
+                const wasPlaying = !audioPlayer.paused;
+                
+                // Update the source URL with a cache-busting parameter
+                const timestamp = new Date().getTime();
+                // Use a different approach to avoid Nginx caching
+                const newStreamUrl = new URL(streamUrl);
+                newStreamUrl.searchParams.set('nocache', timestamp);
+                audioSource.src = newStreamUrl.toString();
+                
+                // Load and play the new source
+                audioPlayer.load();
+                
+                if (wasPlaying) {
+                    const playPromise = audioPlayer.play();
+                    if (playPromise !== undefined) {
+                        playPromise.catch(error => {
+                            console.error(`Error playing audio ${streamNumber} after refresh:`, error);
+                            handlePlaybackError(`Error playing stream ${streamNumber} after refresh. Retrying...`);
+                        });
+                    }
+                }
+                
+                // Reset retry count on successful refresh
+                retryCount = 0;
+                statusElement.textContent = `Stream ${streamNumber} refreshed at ` + new Date().toLocaleTimeString();
+            }
             
-            // Load and play the new source
-            audioPlayer.load();
-            if (wasPlaying) {
+            // Handle playback errors with exponential backoff
+            function handlePlaybackError(message) {
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    const currentDelay = retryDelay * Math.pow(1.5, retryCount - 1); // Exponential backoff
+                    
+                    errorMessageElement.textContent = `${message} Retry ${retryCount}/${maxRetries} in ${currentDelay/1000}s`;
+                    statusElement.textContent = `Stream ${streamNumber} connection issue. Retrying...`;
+                    
+                    // Try again after calculated delay
+                    setTimeout(refreshStream, currentDelay);
+                } else {
+                    errorMessageElement.textContent = `Maximum retry attempts reached. Please click "Reconnect" to try again.`;
+                    statusElement.textContent = `Stream ${streamNumber} connection failed`;
+                }
+            }
+            
+            // Function to completely reconnect to the stream (used for severe connection issues)
+            function reconnectStream() {
+                // Reset error state
+                retryCount = 0;
+                errorMessageElement.textContent = '';
+                statusElement.textContent = `Reconnecting to stream ${streamNumber}...`;
+                
+                // Force browser to drop any cached connections
+                const reconnectUrl = new URL(streamUrl);
+                reconnectUrl.searchParams.set('reconnect', Date.now());
+                audioSource.src = reconnectUrl.toString();
+                
+                audioPlayer.load();
                 const playPromise = audioPlayer.play();
                 if (playPromise !== undefined) {
                     playPromise.catch(error => {
-                        console.error('Error playing audio after refresh:', error);
-                        statusElement.textContent = 'Error refreshing stream. Trying again...';
-                        // Try again after a short delay
-                        setTimeout(refreshStream, 3000);
+                        console.error(`Error reconnecting to stream ${streamNumber}:`, error);
+                        handlePlaybackError(`Failed to reconnect to stream ${streamNumber}.`);
                     });
                 }
-            }
-            
-            statusElement.textContent = 'Stream refreshed at ' + new Date().toLocaleTimeString();
-        }
-        
-        // Function to start the refresh timer
-        function startRefreshTimer() {
-            // Clear any existing timer
-            if (refreshTimer) {
-                clearInterval(refreshTimer);
-            }
-            
-            // Set up the new timer
-            refreshTimer = setInterval(refreshStream, refreshInterval * 60 * 1000);
-            refreshTimeDisplay.textContent = refreshInterval;
-            console.log(`Stream will refresh every ${refreshInterval} minutes`);
-        }
-        
-        // Apply settings button click handler
-        applySettingsBtn.addEventListener('click', () => {
-            const newInterval = parseInt(refreshIntervalInput.value);
-            if (newInterval >= 1 && newInterval <= 60) {
-                refreshInterval = newInterval;
+                
+                // Restart the refresh timer
                 startRefreshTimer();
-                statusElement.textContent = `Refresh interval set to ${refreshInterval} minutes`;
-            } else {
-                alert('Please enter a valid interval between 1 and 60 minutes');
             }
-        });
-        
-        // Check if the stream is actually progressing
-        function monitorStreamProgress() {
-            setInterval(() => {
-                if (!audioPlayer.paused) {
-                    // If the current time hasn't changed in 10 seconds, the stream might be stuck
-                    if (audioPlayer.currentTime === lastPlayPosition) {
-                        noProgressCount++;
-                        if (noProgressCount >= 2) { // After 20 seconds of no progress
-                            console.log('Stream appears to be stuck, refreshing...');
-                            refreshStream();
+            
+            // Function to start the refresh timer
+            function startRefreshTimer() {
+                // Clear any existing timer
+                if (refreshTimer) {
+                    clearInterval(refreshTimer);
+                }
+                
+                // Set up the new timer
+                refreshTimer = setInterval(refreshStream, refreshInterval * 60 * 1000);
+                refreshTimeDisplay.textContent = refreshInterval;
+                console.log(`Stream ${streamNumber} will refresh every ${refreshInterval} minutes`);
+            }
+            
+            // Apply settings button click handler
+            applySettingsBtn.addEventListener('click', () => {
+                const newInterval = parseInt(refreshIntervalInput.value);
+                if (newInterval >= 1 && newInterval <= 60) {
+                    refreshInterval = newInterval;
+                    startRefreshTimer();
+                    statusElement.textContent = `Stream ${streamNumber} refresh interval set to ${refreshInterval} minutes`;
+                } else {
+                    alert('Please enter a valid interval between 1 and 60 minutes');
+                }
+            });
+            
+            // Refresh now button handler
+            refreshNowBtn.addEventListener('click', () => {
+                refreshStream();
+            });
+            
+            // Reconnect button handler
+            reconnectBtn.addEventListener('click', () => {
+                reconnectStream();
+            });
+            
+            // Check if the stream is actually progressing
+            function monitorStreamProgress() {
+                setInterval(() => {
+                    if (!audioPlayer.paused) {
+                        // If the current time hasn't changed in 10 seconds, the stream might be stuck
+                        if (audioPlayer.currentTime === lastPlayPosition) {
+                            noProgressCount++;
+                            if (noProgressCount >= 2) { // After 20 seconds of no progress
+                                console.log(`Stream ${streamNumber} appears to be stuck, refreshing...`);
+                                refreshStream();
+                                noProgressCount = 0;
+                            }
+                        } else {
                             noProgressCount = 0;
                         }
-                    } else {
-                        noProgressCount = 0;
+                        lastPlayPosition = audioPlayer.currentTime;
                     }
-                    lastPlayPosition = audioPlayer.currentTime;
+                }, 10000); // Check every 10 seconds
+            }
+            
+            // Standard event listeners
+            audioPlayer.addEventListener('playing', () => {
+                statusElement.textContent = `Stream ${streamNumber} is playing`;
+                errorMessageElement.textContent = '';
+                retryCount = 0; // Reset retry count when stream plays successfully
+            });
+            
+            audioPlayer.addEventListener('waiting', () => {
+                statusElement.textContent = `Stream ${streamNumber} buffering...`;
+            });
+            
+            audioPlayer.addEventListener('error', (e) => {
+                console.error(`Audio player ${streamNumber} error:`, e);
+                
+                // Check if we can get more specific error information
+                let errorMessage = `Error connecting to stream ${streamNumber}.`;
+                if (audioPlayer.error) {
+                    // MediaError codes: https://developer.mozilla.org/en-US/docs/Web/API/MediaError/code
+                    switch (audioPlayer.error.code) {
+                        case 1: // MEDIA_ERR_ABORTED
+                            errorMessage = `Stream ${streamNumber} playback aborted by the user.`;
+                            break;
+                        case 2: // MEDIA_ERR_NETWORK
+                            errorMessage = `Stream ${streamNumber} network error (504 Gateway Timeout likely).`;
+                            break;
+                        case 3: // MEDIA_ERR_DECODE
+                            errorMessage = `Stream ${streamNumber} audio decoding error.`;
+                            break;
+                        case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                            errorMessage = `Stream ${streamNumber} audio format not supported.`;
+                            break;
+                    }
                 }
-            }, 10000); // Check every 10 seconds
+                
+                // Network errors are usually recoverable, so retry
+                if (audioPlayer.error && audioPlayer.error.code === 2) {
+                    handlePlaybackError(errorMessage);
+                } else {
+                    errorMessageElement.textContent = errorMessage;
+                    statusElement.textContent = `Stream ${streamNumber} error. Click Reconnect.`;
+                }
+            });
+            
+            // Initialize
+            function initialize() {
+                // Set a shorter initial refresh interval to handle Nginx timeouts better
+                refreshInterval = 3;
+                refreshIntervalInput.value = refreshInterval;
+                refreshTimeDisplay.textContent = refreshInterval;
+                
+                startRefreshTimer();
+                monitorStreamProgress();
+            }
+            
+            return { initialize };
         }
         
-        // Standard event listeners
-        audioPlayer.addEventListener('playing', () => {
-            statusElement.textContent = 'Stream is playing';
-        });
-        
-        audioPlayer.addEventListener('waiting', () => {
-            statusElement.textContent = 'Buffering...';
-        });
-        
-        audioPlayer.addEventListener('error', () => {
-            statusElement.textContent = 'Error connecting to stream. Refreshing...';
-            setTimeout(refreshStream, 3000);
-        });
-        
-        // Initialize the refresh timer and progress monitor when the page loads
+        // Initialize both streams when the page loads
         window.addEventListener('load', () => {
-            startRefreshTimer();
-            monitorStreamProgress();
+            const stream1 = createStreamHandler(1, 'http://localhost:3001');
+            const stream2 = createStreamHandler(2, 'http://localhost:3002');
+            
+            stream1.initialize();
+            stream2.initialize();
         });
     </script>
 </body>
